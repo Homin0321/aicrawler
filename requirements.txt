@@ -1,0 +1,5 @@
+streamlit
+crawl4ai
+python-dotenv
+aiohttp
+google-generativeai
