@@ -6,6 +6,8 @@ import asyncio
 import re
 import os
 from aiohttp.client_exceptions import ClientConnectorError, InvalidURL
+from weasyprint import HTML
+import markdown
 
 # --- 1. Constants ---
 # Session state keys
@@ -89,7 +91,7 @@ def get_gemini_model():
         st.error("GEMINI_API_KEY is not set. Please check your .env file.")
         return None
     genai.configure(api_key=GEMINI_API_KEY)
-    return genai.GenerativeModel('gemini-flash-lite-latest')
+    return genai.GenerativeModel('gemini-2.5-flash-lite')
 
 def convert_by_gemini(instruction, text):
     """Converts text using Gemini."""
@@ -102,6 +104,17 @@ def convert_by_gemini(instruction, text):
     except Exception as e:
         st.error(f"An error occurred during Gemini processing: {e}")
         return None
+
+def download_pdf(markdown_text, file_name="crawled_content.pdf"):
+    """Converts Markdown to PDF and provides a download button."""
+    html_text = markdown.markdown(markdown_text)
+    pdf_file = HTML(string=html_text).write_pdf()
+    st.download_button(
+        label="Download PDF",
+        data=pdf_file,
+        file_name=file_name,
+        mime="application/pdf"
+    )
 
 @st.dialog(title="Markdown Code", width="large")
 def show_markdown_code(markdown_text):
@@ -150,7 +163,43 @@ def render_sidebar():
                 st.error(f"Failed to connect to URL: {url}. Please check the URL and your network connection.")
             except Exception as e:
                 st.error(f"An unexpected error occurred: {e}")
+    
+    with st.sidebar.popover("Markdown Code", width="stretch"):
+        selected_text = st.radio(
+            "Select content to view Markdown code",
+            ("Crawled", "AI Processed", "Summary"),
+            index=None
+        )
+        if st.button("Show Markdown", key="show_markdown_button"):
+            if selected_text == "Crawled":
+                text = st.session_state.get(SESSION_KEYS["crawled_text"])
+            elif selected_text == "AI Processed":
+                text = st.session_state.get(SESSION_KEYS["llmed_text"])
+            else:
+                text = st.session_state.get(SESSION_KEYS["summary_text"])
 
+            if text:
+                show_markdown_code(text)
+
+    with st.sidebar.popover("Download PDF", width="stretch"):
+        selected_text = st.radio(
+            "Select content to download as PDF",
+            ("Crawled", "AI Processed", "Summary"),
+            index=None
+        )
+        if selected_text == "Crawled":
+            text = st.session_state.get(SESSION_KEYS["crawled_text"])
+            file_name = "crawled.pdf"
+        elif selected_text == "AI Processed":
+            text = st.session_state.get(SESSION_KEYS["llmed_text"])
+            file_name = "ai_processed.pdf"
+        else:
+            text = st.session_state.get(SESSION_KEYS["summary_text"])
+            file_name = "summary.pdf"
+
+        if text:
+            download_pdf(text, file_name=file_name)
+    
 def render_main_content():
     """Renders the main content area (tabs)."""
     tab1, tab2, tab3 = st.tabs(["Crawled", "AI Processed", "Summary"])
@@ -161,8 +210,6 @@ def render_main_content():
 
     with tab1:
         if crawled_text:
-            if st.button("Markdown Code", key="crawled_markdown"):
-                show_markdown_code(crawled_text)
             st.markdown(crawled_text)
         else:
             st.info("No crawled content. Enter a URL and click the 'Crawl' button.")
@@ -174,8 +221,6 @@ def render_main_content():
                 st.session_state[SESSION_KEYS["llmed_text"]] = llmed_text
         
         if llmed_text:
-            if st.button("Markdown Code", key="llmed_markdown"):
-                show_markdown_code(llmed_text)
             st.markdown(llmed_text)
         else:
             st.info("No processed content. Please run the crawler first.")
@@ -187,8 +232,6 @@ def render_main_content():
                 st.session_state[SESSION_KEYS["summary_text"]] = summary_text
 
         if summary_text:
-            if st.button("Markdown Code", key="summary_markdown"):
-                show_markdown_code(summary_text)
             st.markdown(summary_text)
         else:
             st.info("No summarized content.")

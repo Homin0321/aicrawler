@@ -3,3 +3,5 @@ crawl4ai
 python-dotenv
 aiohttp
 google-generativeai
+markdown-pdf
+weasyprint
