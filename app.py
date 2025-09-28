@@ -77,7 +77,11 @@ async def crawl_url(url, config):
     """Asynchronously crawls a URL and saves the result to session_state."""
     async with AsyncWebCrawler() as crawler:
         result = await crawler.arun(url=url, config=config)
-        st.session_state[SESSION_KEYS["crawled_text"]] = result.markdown.raw_markdown
+        if result and hasattr(result, "markdown") and hasattr(result.markdown, "raw_markdown"):
+            st.session_state[SESSION_KEYS["crawled_text"]] = result.markdown.raw_markdown
+        else:
+            st.error("Failed to retrieve markdown content from the crawl result.")
+            st.session_state[SESSION_KEYS["crawled_text"]] = ""
         # Reset LLM text and summary after crawling
         st.session_state[SESSION_KEYS["llmed_text"]] = ""
         st.session_state[SESSION_KEYS["summary_text"]] = ""
@@ -100,6 +104,9 @@ def convert_by_gemini(instruction, text):
         return None
     try:
         response = model.generate_content(instruction + text)
+        if not response or not hasattr(response, "text"):
+            st.error("Gemini returned no valid response.")
+            return None
         return response.text
     except Exception as e:
         st.error(f"An error occurred during Gemini processing: {e}")
@@ -107,6 +114,9 @@ def convert_by_gemini(instruction, text):
 
 def download_pdf(markdown_text, file_name="crawled_content.pdf"):
     """Converts Markdown to PDF and provides a download button."""
+    if not markdown_text:
+        st.warning("No content available to generate PDF.")
+        return
     html_text = markdown.markdown(markdown_text)
     pdf_file = HTML(string=html_text).write_pdf()
     st.download_button(
@@ -126,6 +136,12 @@ def render_sidebar():
     st.sidebar.title("AI Web Crawler 🌐")
 
     with st.sidebar.expander("Crawl Settings", expanded=False):
+        image_handling = st.radio(
+            "Image handling",
+            ["include", "exclude"],
+            index=0,
+        )
+        image_handling = (image_handling == "exclude")
         excluded_tags_default = ["nav", "footer", "aside", "header", "script", "style", "video", "audio", "form", "input", "button"]
         excluded_tags = st.multiselect(
             "Tags to exclude",
@@ -154,11 +170,12 @@ def render_sidebar():
                     cache_mode=CacheMode.BYPASS,
                     remove_overlay_elements=True,
                     excluded_tags=excluded_tags,
+                    exclude_all_images=image_handling,
                     markdown_generator=DefaultMarkdownGenerator(
                         options={"ignore_links": False},
                     ),
                 )
-                asyncio.run(crawl_url(url, crawler_config))
+                loop.run_until_complete(crawl_url(url, crawler_config))
             except (ClientConnectorError, InvalidURL):
                 st.error(f"Failed to connect to URL: {url}. Please check the URL and your network connection.")
             except Exception as e:
