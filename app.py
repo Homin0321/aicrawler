@@ -37,7 +37,6 @@ PROMPTS = {
         a perfect reading experience where nothing valuable is lost, but all noise is removed.
 
         Here is the text to process:
-
         ''',
     "summary": '''
         Summarize the following markdown content into a concise summary in markdown format, 
@@ -104,6 +103,10 @@ def convert_by_gemini(instruction, text):
         st.error(f"An error occurred during Gemini processing: {e}")
         return None
 
+@st.dialog(title="Markdown Code", width="large")
+def show_markdown_code(markdown_text):
+    st.code(markdown_text, language="markdown")
+
 # --- 4. UI Rendering Functions ---
 def render_sidebar():
     """Renders the sidebar UI."""
@@ -150,7 +153,7 @@ def render_sidebar():
 
 def render_main_content():
     """Renders the main content area (tabs)."""
-    tab1, tab2, tab3, tab4 = st.tabs(["Crawled", "AI Processed", "Markdown", "Summary"])
+    tab1, tab2, tab3 = st.tabs(["Crawled", "AI Processed", "Summary"])
 
     crawled_text = st.session_state.get(SESSION_KEYS["crawled_text"])
     llmed_text = st.session_state.get(SESSION_KEYS["llmed_text"])
@@ -158,6 +161,8 @@ def render_main_content():
 
     with tab1:
         if crawled_text:
+            if st.button("Markdown Code", key="crawled_markdown"):
+                show_markdown_code(crawled_text)
             st.markdown(crawled_text)
         else:
             st.info("No crawled content. Enter a URL and click the 'Crawl' button.")
@@ -169,27 +174,24 @@ def render_main_content():
                 st.session_state[SESSION_KEYS["llmed_text"]] = llmed_text
         
         if llmed_text:
+            if st.button("Markdown Code", key="llmed_markdown"):
+                show_markdown_code(llmed_text)
             st.markdown(llmed_text)
         else:
             st.info("No processed content. Please run the crawler first.")
 
     with tab3:
-        if llmed_text:
-            st.code(llmed_text, language="markdown")
-        else:
-            st.info("No processed content.")
-
-    with tab4:
         if llmed_text and not summary_text:
             with st.spinner("Generating summary with Gemini..."):
                 summary_text = convert_by_gemini(PROMPTS["summary"], llmed_text)
                 st.session_state[SESSION_KEYS["summary_text"]] = summary_text
 
         if summary_text:
+            if st.button("Markdown Code", key="summary_markdown"):
+                show_markdown_code(summary_text)
             st.markdown(summary_text)
         else:
             st.info("No summarized content.")
-
 
 # --- 5. Main Application Execution ---
 def main():
