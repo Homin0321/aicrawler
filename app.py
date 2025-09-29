@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 import asyncio
 import re
 import os
+import sys
 from aiohttp.client_exceptions import ClientConnectorError, InvalidURL
 from weasyprint import HTML
 import markdown
@@ -52,7 +53,18 @@ PROMPTS = {
 try:
     loop = asyncio.get_running_loop()
 except RuntimeError:
-    loop = asyncio.new_event_loop()
+    # Windows 환경에서 ProactorEventLoop를 사용하도록 설정
+    if os.name == 'nt': # nt는 Windows를 의미
+        try:
+            # Proactor 루프가 없는 경우를 대비
+            loop = asyncio.ProactorEventLoop()
+        except NotImplementedError:
+            # Proactor 루프 생성이 불가능하다면 기본 루프 사용
+            loop = asyncio.new_event_loop()
+    else:
+        # Linux/macOS 등은 Selector/Default 루프 사용
+        loop = asyncio.new_event_loop()
+
     asyncio.set_event_loop(loop)
 
 # --- 3. Core Logic Functions ---
