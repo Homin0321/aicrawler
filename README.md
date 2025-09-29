@@ -15,6 +15,7 @@ This is a simple web crawler application that uses AI to extract the main conten
 
 - Python 3.7+
 - Pip
+- WeasyPrint requires some libraries that are not installed by default. On Windows, the easiest way to install them is by using the official pre-built binaries. Download and install the latest [GTK3+ bundle for Windows](https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer/releases). For other operating systems, please refer to the [WeasyPrint documentation](https://doc.weasyprint.org/stable/first_steps.html).
 
 ### Installation
 
@@ -71,3 +72,4 @@ This project uses the following libraries:
 -   `python-dotenv`: For managing environment variables.
 -   `aiohttp`: Asynchronous HTTP client/server framework.
 -   `google-generativeai`: For interacting with the Google Gemini API.
+-   `weasyprint`: For converting HTML to PDF.
