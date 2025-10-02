@@ -99,6 +99,11 @@ async def crawl_url(url, config):
         st.session_state[SESSION_KEYS["llmed_text"]] = ""
         st.session_state[SESSION_KEYS["summary_text"]] = ""
 
+        if "chat_session" in st.session_state:
+            del st.session_state["chat_session"]
+        if "chat_display_history" in st.session_state:
+            st.session_state["chat_display_history"] = []
+
 def get_gemini_key():
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
     if not GEMINI_API_KEY:
@@ -114,6 +119,7 @@ def get_gemini_model():
     genai.configure(api_key=GEMINI_API_KEY)
     return genai.GenerativeModel('gemini-2.5-flash-lite')
 
+@st.cache_data
 def convert_by_gemini(instruction, text):
     """Converts text using Gemini."""
     model = get_gemini_model()
@@ -129,7 +135,7 @@ def convert_by_gemini(instruction, text):
         st.error(f"An error occurred during Gemini processing: {e}")
         return None
 
-@st.cache_resource
+@st.cache_data
 def get_gemini_chat(context):
     model = get_gemini_model()
     if not model:
@@ -178,8 +184,20 @@ def download_pdf(markdown_text, file_name="crawled_content.pdf"):
     if not markdown_text:
         st.warning("No content available to generate PDF.")
         return
-    html_text = markdown.markdown(markdown_text)
-    pdf_file = HTML(string=html_text).write_pdf()
+    # Convert markdown to HTML
+    html_text = markdown.markdown(
+        markdown_text,
+        extensions=['extra', 'codehilite', 'tables', 'fenced_code']
+    )
+    
+    # Read the HTML template from file
+    with open("./styled.html", "r", encoding="utf-8") as f:
+        styled_html_template = f.read()
+        
+    # Replace the placeholder with the actual content
+    styled_html = styled_html_template.replace("{{content}}", html_text)
+    
+    pdf_file = HTML(string=styled_html).write_pdf()
     st.download_button(
         label="Download PDF",
         data=pdf_file,
