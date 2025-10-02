@@ -41,8 +41,9 @@ PROMPTS = {
         Here is the text to process:
         ''',
     "summary": '''
-        Summarize the following markdown content into a concise summary in markdown format, 
-        preserving all key points and main ideas. Focus on clarity and brevity, but do not omit important information.
+        Generate a concise summary of the following content.
+        The summary must be presented exclusively in Markdown format, utilizing appropriate elements (e.g., bullet points, bolding for emphasis) to ensure high clarity and brevity.
+        Crucially, the summary must meticulously preserve all key points and main ideas without omission of essential information. Strive for maximum density of information transfer.
 
         Content to summarize:
         '''
@@ -86,13 +87,17 @@ async def crawl_url(url, config):
         st.session_state[SESSION_KEYS["llmed_text"]] = ""
         st.session_state[SESSION_KEYS["summary_text"]] = ""
 
-
-@st.cache_resource
-def get_gemini_model():
-    """Loads and caches the Gemini model."""
+def get_gemini_key():
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
     if not GEMINI_API_KEY:
         st.error("GEMINI_API_KEY is not set. Please check your .env file.")
+        return None
+    return GEMINI_API_KEY
+
+@st.cache_resource
+def get_gemini_model():
+    GEMINI_API_KEY = get_gemini_key()
+    if not GEMINI_API_KEY:
         return None
     genai.configure(api_key=GEMINI_API_KEY)
     return genai.GenerativeModel('gemini-2.5-flash-lite')
@@ -111,6 +116,50 @@ def convert_by_gemini(instruction, text):
     except Exception as e:
         st.error(f"An error occurred during Gemini processing: {e}")
         return None
+
+@st.cache_resource
+def get_gemini_chat(context):
+    model = get_gemini_model()
+    if not model:
+        return None
+
+    chat = model.start_chat(history=[])
+    # Initialize with transcript context
+    chat.send_message(
+        f"You are an assistant that answers questions about this transcript:\n{context}"
+    )
+    return chat
+
+def chat_with_gemini(context):
+    """Chat interface to ask questions about the video transcript using Gemini API."""
+    user_input = st.chat_input("Ask something about the video...")
+
+    model = get_gemini_model()
+    if not model:
+        return None
+    try:
+        if "chat_session" not in st.session_state:
+            st.session_state["chat_session"] = get_gemini_chat(context)
+    except Exception as e:
+        st.error(f"Failed to initialize Gemini chat: {e}")
+        return None
+
+    if "chat_display_history" not in st.session_state:
+        st.session_state["chat_display_history"] = []
+
+    if user_input:
+        st.session_state["chat_display_history"].append({"role": "user", "content": user_input})
+        try:
+            response = st.session_state["chat_session"].send_message(user_input)
+            answer = response.text.strip()
+            st.session_state["chat_display_history"].append({"role": "assistant", "content": answer})
+        except Exception as e:
+            st.error(f"Gemini Q&A Error: {e}")
+
+    # Display previous messages in reverse order
+    for message in reversed(st.session_state["chat_display_history"]):
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
 def download_pdf(markdown_text, file_name="crawled_content.pdf"):
     """Converts Markdown to PDF and provides a download button."""
@@ -139,7 +188,7 @@ def render_sidebar():
         image_handling = st.radio(
             "Image handling",
             ["include", "exclude"],
-            index=0,
+            index=1,
         )
         image_handling = (image_handling == "exclude")
         excluded_tags_default = ["nav", "footer", "aside", "header", "script", "style", "video", "audio", "form", "input", "button"]
@@ -219,7 +268,7 @@ def render_sidebar():
     
 def render_main_content():
     """Renders the main content area (tabs)."""
-    tab1, tab2, tab3 = st.tabs(["Crawled", "AI Processed", "Summary"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Crawled", "AI Processed", "Summary", "Chatbot"])
 
     crawled_text = st.session_state.get(SESSION_KEYS["crawled_text"])
     llmed_text = st.session_state.get(SESSION_KEYS["llmed_text"])
@@ -252,6 +301,12 @@ def render_main_content():
             st.markdown(summary_text)
         else:
             st.info("No summarized content.")
+    
+    with tab4:
+        if crawled_text:
+            chat_with_gemini(crawled_text)
+        else:
+            st.info("No crawled content to chat about. Please run the crawler first.")
 
 # --- 5. Main Application Execution ---
 def main():
