@@ -135,7 +135,7 @@ def convert_by_gemini(instruction, text):
         st.error(f"An error occurred during Gemini processing: {e}")
         return None
 
-@st.cache_data
+@st.cache_resource
 def get_gemini_chat(context):
     model = get_gemini_model()
     if not model:
