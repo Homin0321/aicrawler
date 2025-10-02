@@ -191,7 +191,9 @@ def download_pdf(markdown_text, file_name="crawled_content.pdf"):
     )
     
     # Read the HTML template from file
-    with open("./styled.html", "r", encoding="utf-8") as f:
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.join(script_dir, "styled.html")
+    with open(file_path, "r", encoding="utf-8") as f:
         styled_html_template = f.read()
         
     # Replace the placeholder with the actual content
