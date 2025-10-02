@@ -4,4 +4,5 @@ python-dotenv
 aiohttp
 google-generativeai
 markdown-pdf
+markdown
 weasyprint
