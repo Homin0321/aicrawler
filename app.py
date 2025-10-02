@@ -143,8 +143,8 @@ def get_gemini_chat(context):
     return chat
 
 def chat_with_gemini(context):
-    """Chat interface to ask questions about the video transcript using Gemini API."""
-    user_input = st.chat_input("Ask something about the video...")
+    """Chat interface to ask questions about the content using Gemini API."""
+    user_input = st.chat_input("Ask something about the content...")
 
     model = get_gemini_model()
     if not model:
