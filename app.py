@@ -10,6 +10,11 @@ from aiohttp.client_exceptions import ClientConnectorError, InvalidURL
 from crawl4ai import *
 from dotenv import load_dotenv
 from weasyprint import HTML
+from youtube_transcript_api import (
+    NoTranscriptFound,
+    TranscriptsDisabled,
+    YouTubeTranscriptApi,
+)
 
 # --- 1. Constants ---
 MODEL_OPTIONS = [
@@ -107,6 +112,28 @@ def is_valid_url(url):
         re.IGNORECASE,
     )
     return re.match(regex, url) is not None
+
+
+def get_video_id(url):
+    """
+    Extracts the video ID from a YouTube URL.
+    """
+    pattern = r"(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})"
+    match = re.search(pattern, url)
+    return match.group(1) if match else None
+
+
+def get_youtube_transcript(video_id):
+    """Fetches the transcript of a YouTube video."""
+    try:
+        transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
+        transcript_text = " ".join([item["text"] for item in transcript_list])
+        return transcript_text
+    except (TranscriptsDisabled, NoTranscriptFound):
+        return None
+    except Exception as e:
+        st.error(f"Error fetching transcript: {e}")
+        return None
 
 
 def fix_bold_symbol_issue(md: str) -> str:
@@ -349,24 +376,43 @@ def render_sidebar():
             st.sidebar.error("Please enter a valid URL (e.g., https://example.com)")
             return
 
-        with st.spinner(f"Crawling {url}..."):
-            try:
-                crawler_config = CrawlerRunConfig(
-                    cache_mode=CacheMode.BYPASS,
-                    remove_overlay_elements=True,
-                    excluded_tags=excluded_tags,
-                    exclude_all_images=image_handling,
-                    markdown_generator=DefaultMarkdownGenerator(
-                        options={"ignore_links": False},
-                    ),
-                )
-                loop.run_until_complete(crawl_url(url, crawler_config))
-            except (ClientConnectorError, InvalidURL):
-                st.error(
-                    f"Failed to connect to URL: {url}. Please check the URL and your network connection."
-                )
-            except Exception as e:
-                st.error(f"An unexpected error occurred: {e}")
+        video_id = get_video_id(url)
+        if video_id:
+            with st.spinner(f"Fetching transcript for {url}..."):
+                transcript = get_youtube_transcript(video_id)
+                if transcript:
+                    st.session_state[SESSION_KEYS["crawled_text"]] = transcript
+                    # Reset LLM text and summary after crawling
+                    st.session_state[SESSION_KEYS["llmed_text"]] = ""
+                    st.session_state[SESSION_KEYS["summary_text"]] = ""
+
+                    if "chat_session" in st.session_state:
+                        del st.session_state["chat_session"]
+                    if "chat_display_history" in st.session_state:
+                        st.session_state["chat_display_history"] = []
+                else:
+                    st.error(
+                        "Failed to retrieve transcript. The video might not have captions or they are disabled."
+                    )
+        else:
+            with st.spinner(f"Crawling {url}..."):
+                try:
+                    crawler_config = CrawlerRunConfig(
+                        cache_mode=CacheMode.BYPASS,
+                        remove_overlay_elements=True,
+                        excluded_tags=excluded_tags,
+                        exclude_all_images=image_handling,
+                        markdown_generator=DefaultMarkdownGenerator(
+                            options={"ignore_links": False},
+                        ),
+                    )
+                    loop.run_until_complete(crawl_url(url, crawler_config))
+                except (ClientConnectorError, InvalidURL):
+                    st.error(
+                        f"Failed to connect to URL: {url}. Please check the URL and your network connection."
+                    )
+                except Exception as e:
+                    st.error(f"An unexpected error occurred: {e}")
 
     with st.sidebar.popover("Markdown Code", width="stretch"):
         selected_text = st.radio(

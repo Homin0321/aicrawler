@@ -6,3 +6,4 @@ google-generativeai
 markdown-pdf
 markdown
 weasyprint
+youtube-transcript-api
