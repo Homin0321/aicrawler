@@ -2,7 +2,6 @@ import asyncio
 import os
 import re
 import sys
-
 import google.generativeai as genai
 import markdown
 import streamlit as st
@@ -12,19 +11,28 @@ from dotenv import load_dotenv
 from weasyprint import HTML
 
 # --- 1. Constants ---
+MODEL_OPTIONS = [
+    "gemini-flash-lite-latest",
+    "gemini-flash-latest",
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-flash",
+    "gemini-2.5-pro",
+    "gemini-3-pro-preview",
+]
 # Session state keys
 SESSION_KEYS = {
     "crawled_text": "crawled_text",
     "llmed_text": "llmed_text",
     "summary_text": "summary_text",
     "url_to_crawl": "url_to_crawl",
+    "selected_model": "selected_model", # Added for model selection
 }
 
 # Gemini prompts
 PROMPTS = {
     "extraction": """
-        The given text is the conversion of HTML content into Markdown text.
-        Extract the main content while preserving its original wording and substance completely. Your task is:
+    The given text is the conversion of HTML content into Markdown text.
+    Extract the main content while preserving its original wording and substance completely. Your task is:
 
         1. Maintain the exact language and terminology used in the main content
         2. Remove only clearly irrelevant elements like:
@@ -77,7 +85,10 @@ def initialize_session_state():
     """Initializes session state."""
     for key in SESSION_KEYS.values():
         if key not in st.session_state:
-            st.session_state[key] = ""
+            if key == SESSION_KEYS["selected_model"]:
+                st.session_state[key] = MODEL_OPTIONS[0]
+            else:
+                st.session_state[key] = ""
 
 
 def is_valid_url(url):
@@ -133,7 +144,8 @@ def get_gemini_model():
     if not GEMINI_API_KEY:
         return None
     genai.configure(api_key=GEMINI_API_KEY)
-    return genai.GenerativeModel("gemini-2.5-flash-lite")
+    selected_model = st.session_state.get(SESSION_KEYS["selected_model"], MODEL_OPTIONS[0])
+    return genai.GenerativeModel(selected_model)
 
 
 @st.cache_data
@@ -237,6 +249,12 @@ def show_markdown_code(markdown_text):
 def render_sidebar():
     """Renders the sidebar UI."""
     st.sidebar.title("AI Web Crawler 🌐")
+
+    st.sidebar.selectbox(
+        "Select Gemini Model",
+        MODEL_OPTIONS,
+        key=SESSION_KEYS["selected_model"],
+    )
 
     with st.sidebar.expander("Crawl Settings", expanded=False):
         image_handling = st.radio(
