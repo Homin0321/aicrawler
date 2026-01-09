@@ -2,6 +2,7 @@ import asyncio
 import os
 import re
 import sys
+
 import google.generativeai as genai
 import markdown
 import streamlit as st
@@ -25,7 +26,7 @@ SESSION_KEYS = {
     "llmed_text": "llmed_text",
     "summary_text": "summary_text",
     "url_to_crawl": "url_to_crawl",
-    "selected_model": "selected_model", # Added for model selection
+    "selected_model": "selected_model",  # Added for model selection
 }
 
 # Gemini prompts
@@ -90,6 +91,9 @@ def initialize_session_state():
             else:
                 st.session_state[key] = ""
 
+    if "chat_display_history" not in st.session_state:
+        st.session_state["chat_display_history"] = []
+
 
 def is_valid_url(url):
     """A simple function to validate a URL."""
@@ -103,6 +107,20 @@ def is_valid_url(url):
         re.IGNORECASE,
     )
     return re.match(regex, url) is not None
+
+
+def fix_bold_symbol_issue(md: str) -> str:
+    pattern = re.compile(r"\*\*(.+?)\*\*(\s*)", re.DOTALL)
+
+    def repl(m):
+        inner = m.group(1)
+        after = m.group(2)
+        # Add space after ** if content contains symbols and no space exists
+        if re.search(r"[^0-9A-Za-z\s]", inner) and after == "":
+            return f"**{inner}** "
+        return m.group(0)
+
+    return pattern.sub(repl, md)
 
 
 async def crawl_url(url, config):
@@ -144,7 +162,9 @@ def get_gemini_model():
     if not GEMINI_API_KEY:
         return None
     genai.configure(api_key=GEMINI_API_KEY)
-    selected_model = st.session_state.get(SESSION_KEYS["selected_model"], MODEL_OPTIONS[0])
+    selected_model = st.session_state.get(
+        SESSION_KEYS["selected_model"], MODEL_OPTIONS[0]
+    )
     return genai.GenerativeModel(selected_model)
 
 
@@ -159,10 +179,27 @@ def convert_by_gemini(instruction, text):
         if not response or not hasattr(response, "text"):
             st.error("Gemini returned no valid response.")
             return None
-        return response.text
+        return fix_bold_symbol_issue(response.text.strip())
     except Exception as e:
         st.error(f"An error occurred during Gemini processing: {e}")
         return None
+
+
+def initialize_chat_session(context):
+    """
+    Initialize or reset chat session with transcript context.
+    Args:
+        context (str): The transcript text to provide context for the chat
+    """
+    try:
+        # Create new chat session with Gemini
+        st.session_state["chat_session"] = get_gemini_chat(context)
+        st.session_state["chat_display_history"] = []
+    except Exception as e:
+        st.error(f"Failed to initialize Gemini chat: {e}")
+        # Reset session state on error
+        st.session_state["chat_session"] = None
+        st.session_state["chat_display_history"] = []
 
 
 @st.cache_resource
@@ -180,37 +217,43 @@ def get_gemini_chat(context):
 
 
 def chat_with_gemini(context):
-    """Chat interface to ask questions about the content using Gemini API."""
-    user_input = st.chat_input("Ask something about the content...")
+    """
+    Implements chat interface for transcript Q&A using Gemini API.
+    Args:
+        context (str): The transcript text to chat about
+    """
+    # Initialize chat session if it doesn't exist
+    if (
+        "chat_session" not in st.session_state
+        or st.session_state["chat_session"] is None
+    ):
+        initialize_chat_session(context)
 
-    model = get_gemini_model()
-    if not model:
-        return None
-    try:
-        if "chat_session" not in st.session_state:
-            st.session_state["chat_session"] = get_gemini_chat(context)
-    except Exception as e:
-        st.error(f"Failed to initialize Gemini chat: {e}")
-        return None
+    # Create chat input interface
+    user_input = st.chat_input("Ask something about the video...")
 
-    if "chat_display_history" not in st.session_state:
-        st.session_state["chat_display_history"] = []
-
+    # Process user message and get AI response
     if user_input:
+        # Add user message to chat history
         st.session_state["chat_display_history"].append(
             {"role": "user", "content": user_input}
         )
         try:
+            # Get AI response
             response = st.session_state["chat_session"].send_message(user_input)
-            answer = response.text.strip()
+            answer = fix_bold_symbol_issue(response.text.strip())
+            # Add AI response to chat history
             st.session_state["chat_display_history"].append(
                 {"role": "assistant", "content": answer}
             )
         except Exception as e:
             st.error(f"Gemini Q&A Error: {e}")
+            # Reset chat session on error
+            initialize_chat_session(context)
+            return
 
-    # Display previous messages in reverse order
-    for message in reversed(st.session_state["chat_display_history"]):
+    # Display chat messages
+    for message in st.session_state["chat_display_history"]:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
@@ -363,20 +406,25 @@ def render_sidebar():
 
 
 def render_main_content():
-    """Renders the main content area (tabs)."""
-    tab1, tab2, tab3, tab4 = st.tabs(["Crawled", "AI Processed", "Summary", "Chatbot"])
+    """Renders the main content area."""
+    mode = st.radio(
+        "View Mode",
+        ["Crawled", "AI Processed", "Summary", "Chatbot"],
+        horizontal=True,
+        label_visibility="collapsed",
+    )
 
     crawled_text = st.session_state.get(SESSION_KEYS["crawled_text"])
     llmed_text = st.session_state.get(SESSION_KEYS["llmed_text"])
     summary_text = st.session_state.get(SESSION_KEYS["summary_text"])
 
-    with tab1:
+    if mode == "Crawled":
         if crawled_text:
             st.markdown(crawled_text)
         else:
             st.info("No crawled content. Enter a URL and click the 'Crawl' button.")
 
-    with tab2:
+    elif mode == "AI Processed":
         if crawled_text and not llmed_text:
             with st.spinner("Extracting main content with Gemini..."):
                 llmed_text = convert_by_gemini(PROMPTS["extraction"], crawled_text)
@@ -387,7 +435,12 @@ def render_main_content():
         else:
             st.info("No processed content. Please run the crawler first.")
 
-    with tab3:
+    elif mode == "Summary":
+        if crawled_text and not llmed_text:
+            with st.spinner("Extracting main content with Gemini..."):
+                llmed_text = convert_by_gemini(PROMPTS["extraction"], crawled_text)
+                st.session_state[SESSION_KEYS["llmed_text"]] = llmed_text
+
         if llmed_text and not summary_text:
             with st.spinner("Generating summary with Gemini..."):
                 summary_text = convert_by_gemini(PROMPTS["summary"], llmed_text)
@@ -398,7 +451,7 @@ def render_main_content():
         else:
             st.info("No summarized content.")
 
-    with tab4:
+    elif mode == "Chatbot":
         if crawled_text:
             chat_with_gemini(crawled_text)
         else:
