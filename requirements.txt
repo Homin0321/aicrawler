@@ -2,7 +2,7 @@ streamlit
 crawl4ai
 python-dotenv
 aiohttp
-google-generativeai
+google-genai
 markdown-pdf
 markdown
 weasyprint

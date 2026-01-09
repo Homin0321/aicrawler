@@ -3,12 +3,12 @@ import os
 import re
 import sys
 
-import google.generativeai as genai
 import markdown
 import streamlit as st
 from aiohttp.client_exceptions import ClientConnectorError, InvalidURL
 from crawl4ai import *
 from dotenv import load_dotenv
+from google import genai
 from weasyprint import HTML
 from youtube_transcript_api import (
     NoTranscriptFound,
@@ -184,25 +184,28 @@ def get_gemini_key():
 
 
 @st.cache_resource
-def get_gemini_model():
+def get_gemini_client():
     GEMINI_API_KEY = get_gemini_key()
     if not GEMINI_API_KEY:
         return None
-    genai.configure(api_key=GEMINI_API_KEY)
-    selected_model = st.session_state.get(
-        SESSION_KEYS["selected_model"], MODEL_OPTIONS[0]
-    )
-    return genai.GenerativeModel(selected_model)
+    return genai.Client(api_key=GEMINI_API_KEY)
 
 
 @st.cache_data
 def convert_by_gemini(instruction, text):
     """Converts text using Gemini."""
-    model = get_gemini_model()
-    if not model:
+    client = get_gemini_client()
+    if not client:
         return None
+
+    selected_model = st.session_state.get(
+        SESSION_KEYS["selected_model"], MODEL_OPTIONS[0]
+    )
+
     try:
-        response = model.generate_content(instruction + text)
+        response = client.models.generate_content(
+            model=selected_model, contents=instruction + text
+        )
         if not response or not hasattr(response, "text"):
             st.error("Gemini returned no valid response.")
             return None
@@ -229,13 +232,16 @@ def initialize_chat_session(context):
         st.session_state["chat_display_history"] = []
 
 
-@st.cache_resource
 def get_gemini_chat(context):
-    model = get_gemini_model()
-    if not model:
+    client = get_gemini_client()
+    if not client:
         return None
 
-    chat = model.start_chat(history=[])
+    selected_model = st.session_state.get(
+        SESSION_KEYS["selected_model"], MODEL_OPTIONS[0]
+    )
+
+    chat = client.chats.create(model=selected_model, history=[])
     # Initialize with transcript context
     chat.send_message(
         f"You are an assistant that answers questions about this transcript:\n{context}"
