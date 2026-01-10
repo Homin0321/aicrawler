@@ -71,16 +71,16 @@ PROMPTS = {
 try:
     loop = asyncio.get_running_loop()
 except RuntimeError:
-    # Windows 환경에서 ProactorEventLoop를 사용하도록 설정
-    if os.name == "nt":  # nt는 Windows를 의미
+    # Set to use ProactorEventLoop in Windows environment
+    if os.name == "nt":  # nt means Windows
         try:
-            # Proactor 루프가 없는 경우를 대비
+            # In case Proactor loop is not available
             loop = asyncio.ProactorEventLoop()
         except NotImplementedError:
-            # Proactor 루프 생성이 불가능하다면 기본 루프 사용
+            # If Proactor loop creation is impossible, use default loop
             loop = asyncio.new_event_loop()
     else:
-        # Linux/macOS 등은 Selector/Default 루프 사용
+        # Use Selector/Default loop for Linux/macOS, etc.
         loop = asyncio.new_event_loop()
 
     asyncio.set_event_loop(loop)
@@ -291,11 +291,11 @@ def chat_with_gemini(context):
             st.markdown(message["content"])
 
 
-def download_pdf(markdown_text, file_name="crawled_content.pdf"):
-    """Converts Markdown to PDF and provides a download button."""
+def download_pdf(markdown_text):
+    """Converts Markdown to PDF and returns the PDF data."""
     if not markdown_text:
-        st.warning("No content available to generate PDF.")
-        return
+        return None
+
     # Convert markdown to HTML
     html_text = markdown.markdown(
         markdown_text, extensions=["extra", "codehilite", "tables", "fenced_code"]
@@ -310,10 +310,7 @@ def download_pdf(markdown_text, file_name="crawled_content.pdf"):
     # Replace the placeholder with the actual content
     styled_html = styled_html_template.replace("{{content}}", html_text)
 
-    pdf_file = HTML(string=styled_html).write_pdf()
-    st.download_button(
-        label="Download PDF", data=pdf_file, file_name=file_name, mime="application/pdf"
-    )
+    return HTML(string=styled_html).write_pdf()
 
 
 @st.dialog(title="Markdown Code", width="large")
@@ -420,41 +417,71 @@ def render_sidebar():
                 except Exception as e:
                     st.error(f"An unexpected error occurred: {e}")
 
-    with st.sidebar.popover("Markdown Code", width="stretch"):
-        selected_text = st.radio(
-            "Select content to view Markdown code",
-            ("Crawled", "AI Processed", "Summary"),
-            index=None,
-        )
-        if st.button("Show Markdown", key="show_markdown_button"):
-            if selected_text == "Crawled":
-                text = st.session_state.get(SESSION_KEYS["crawled_text"])
-            elif selected_text == "AI Processed":
-                text = st.session_state.get(SESSION_KEYS["llmed_text"])
+    st.sidebar.divider()
+
+    if st.sidebar.button("Show Markdown Code", width="stretch"):
+        mode = st.session_state.get("view_mode", "Crawled")
+        text_to_show = ""
+        if mode == "Crawled":
+            text_to_show = st.session_state.get(SESSION_KEYS["crawled_text"])
+        elif mode == "AI Processed":
+            text_to_show = st.session_state.get(SESSION_KEYS["llmed_text"])
+        elif mode == "Summary":
+            text_to_show = st.session_state.get(SESSION_KEYS["summary_text"])
+        elif mode == "Chatbot":
+            chat_history = st.session_state.get("chat_display_history", [])
+            assistant_messages = [
+                m["content"] for m in chat_history if m["role"] == "assistant"
+            ]
+            if assistant_messages:
+                text_to_show = assistant_messages[-1]
             else:
-                text = st.session_state.get(SESSION_KEYS["summary_text"])
-
-            if text:
-                show_markdown_code(text)
-
-    with st.sidebar.popover("Download PDF", width="stretch"):
-        selected_text = st.radio(
-            "Select content to download as PDF",
-            ("Crawled", "AI Processed", "Summary"),
-            index=None,
-        )
-        if selected_text == "Crawled":
-            text = st.session_state.get(SESSION_KEYS["crawled_text"])
-            file_name = "crawled.pdf"
-        elif selected_text == "AI Processed":
-            text = st.session_state.get(SESSION_KEYS["llmed_text"])
-            file_name = "ai_processed.pdf"
+                st.sidebar.warning("No assistant answer to show.")
+                text_to_show = None
         else:
-            text = st.session_state.get(SESSION_KEYS["summary_text"])
-            file_name = "summary.pdf"
+            text_to_show = None
 
-        if text:
-            download_pdf(text, file_name=file_name)
+        if text_to_show:
+            show_markdown_code(text_to_show)
+        elif mode != "Chatbot":
+            st.sidebar.warning(f"No content in '{mode}' to show.")
+
+    mode = st.session_state.get("view_mode", "Crawled")
+    text_to_download = ""
+    file_name = "download.pdf"
+
+    if mode == "Crawled":
+        text_to_download = st.session_state.get(SESSION_KEYS["crawled_text"])
+        file_name = "crawled.pdf"
+    elif mode == "AI Processed":
+        text_to_download = st.session_state.get(SESSION_KEYS["llmed_text"])
+        file_name = "ai_processed.pdf"
+    elif mode == "Summary":
+        text_to_download = st.session_state.get(SESSION_KEYS["summary_text"])
+        file_name = "summary.pdf"
+    elif mode == "Chatbot":
+        chat_history = st.session_state.get("chat_display_history", [])
+        assistant_messages = [
+            m["content"] for m in chat_history if m["role"] == "assistant"
+        ]
+        if assistant_messages:
+            text_to_download = assistant_messages[-1]
+            file_name = "chatbot_answer.pdf"
+        else:
+            text_to_download = None
+    else:
+        text_to_download = None
+
+    if text_to_download:
+        pdf_data = download_pdf(text_to_download)
+        if pdf_data:
+            st.sidebar.download_button(
+                label="Download PDF",
+                data=pdf_data,
+                file_name=file_name,
+                mime="application/pdf",
+                width="stretch",
+            )
 
 
 def render_main_content():
@@ -464,6 +491,7 @@ def render_main_content():
         ["Crawled", "AI Processed", "Summary", "Chatbot"],
         horizontal=True,
         label_visibility="collapsed",
+        key="view_mode",
     )
 
     crawled_text = st.session_state.get(SESSION_KEYS["crawled_text"])

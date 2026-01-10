@@ -8,6 +8,9 @@ This is a simple web crawler application that uses AI to extract the main conten
 - Uses Google's Gemini model to extract the main content from the crawled text.
 - Summarizes the extracted content using the Gemini model.
 - Displays the raw crawled content, the AI-processed content, the Markdown version of the processed content, and the summary in a user-friendly interface.
+- Extracts transcripts from YouTube videos.
+- Allows users to chat with the Gemini model.
+- Provides a PDF download option for the summarized content.
 
 ## Setup and Usage
 
@@ -71,5 +74,5 @@ This project uses the following libraries:
 -   `crawl4ai`: For crawling the web pages.
 -   `python-dotenv`: For managing environment variables.
 -   `aiohttp`: Asynchronous HTTP client/server framework.
--   `google-generativeai`: For interacting with the Google Gemini API.
+-   `google-genai`: For interacting with the Google Gemini API.
 -   `weasyprint`: For converting HTML to PDF.
