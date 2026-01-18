@@ -136,7 +136,8 @@ def get_youtube_transcript(video_id):
         return None
 
 
-def fix_bold_symbol_issue(md: str) -> str:
+def fix_markdown_symbol_issue(md: str) -> str:
+    md = md.replace("$", "\\$").replace("~", "\\~")
     pattern = re.compile(r"\*\*(.+?)\*\*(\s*)", re.DOTALL)
 
     def repl(m):
@@ -209,7 +210,7 @@ def convert_by_gemini(instruction, text):
         if not response or not hasattr(response, "text"):
             st.error("Gemini returned no valid response.")
             return None
-        return fix_bold_symbol_issue(response.text.strip())
+        return fix_markdown_symbol_issue(response.text.strip())
     except Exception as e:
         st.error(f"An error occurred during Gemini processing: {e}")
         return None
@@ -274,7 +275,7 @@ def chat_with_gemini(context):
         try:
             # Get AI response
             response = st.session_state["chat_session"].send_message(user_input)
-            answer = fix_bold_symbol_issue(response.text.strip())
+            answer = fix_markdown_symbol_issue(response.text.strip())
             # Add AI response to chat history
             st.session_state["chat_display_history"].append(
                 {"role": "assistant", "content": answer}
