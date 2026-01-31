@@ -19,10 +19,10 @@ from youtube_transcript_api import (
 # --- 1. Constants ---
 MODEL_OPTIONS = [
     "gemini-flash-lite-latest",
-    "gemini-2.5-flash-lite",
-    "gemini-2.5-flash",
     "gemini-3-flash-preview",
     "gemini-3-pro-preview",
+    "gemini-2.5-flash-lite",
+    "gemini-2.5-flash",
 ]
 # Session state keys
 SESSION_KEYS = {
@@ -125,9 +125,17 @@ def get_video_id(url):
 def get_youtube_transcript(video_id):
     """Fetches the transcript of a YouTube video."""
     try:
-        transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
-        transcript_text = " ".join([item["text"] for item in transcript_list])
-        return transcript_text
+        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+
+        try:
+            # Try to fetch English transcript first
+            transcript = transcript_list.find_transcript(["en"])
+        except NoTranscriptFound:
+            # Fallback: take the first available transcript
+            transcript = next(iter(transcript_list))
+
+        return " ".join([item.text for item in transcript.fetch()])
+
     except (TranscriptsDisabled, NoTranscriptFound):
         return None
     except Exception as e:
