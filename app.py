@@ -16,6 +16,8 @@ from youtube_transcript_api import (
     YouTubeTranscriptApi,
 )
 
+from utils import fix_markdown_symbol_issue
+
 # --- 1. Constants ---
 MODEL_OPTIONS = [
     "gemini-flash-lite-latest",
@@ -141,63 +143,6 @@ def get_youtube_transcript(video_id):
     except Exception as e:
         st.error(f"Error fetching transcript: {e}")
         return None
-
-
-def fix_markdown_symbol_issue(md: str) -> str:
-    # Pattern to find code blocks (triple backticks or single backtick)
-    # We want to exclude these from symbol escaping
-    # Captures: 1. Triple backticks blocks, 2. Inline code (simple `...`)
-    code_block_pattern = r"(```[\s\S]*?```|`[^`]*`)"
-
-    parts = re.split(code_block_pattern, md)
-
-    # Pattern for the bold fix
-    bold_pattern = re.compile(r"\*\*(.+?)\*\*(\s*)", re.DOTALL)
-
-    def bold_repl(m):
-        inner = m.group(1)
-        after = m.group(2)
-        inner = inner.lstrip()
-        # Add space after ** if content contains symbols and no space exists
-        if re.search(r"[^0-9A-Za-z\s]", inner) and after == "":
-            return f"**{inner}** "
-        if inner != m.group(1):
-            return f"**{inner}**{after}"
-        return m.group(0)
-
-    # Pattern for the italic fix (avoid matching bold **)
-    italic_pattern = re.compile(
-        r"(?<!\*)\*(?![*])(.+?)(?<!\*)\*(?![*])(\s*)", re.DOTALL
-    )
-
-    def italic_repl(m):
-        inner = m.group(1)
-        after = m.group(2)
-        # Add space after * if content contains quotes and no space exists
-        if re.search(r"['\"]", inner) and after == "":
-            return f"*{inner}* "
-        return m.group(0)
-
-    for i in range(len(parts)):
-        # Even indices are regular text; Odd indices are code blocks (the delimiters)
-        if i % 2 == 0:
-            part = parts[i]
-
-            # 1. Escape $ only if followed by a digit (e.g. $100)
-            part = re.sub(r"\$(\d)", r"\\$\1", part)
-
-            # 2. Escape ~ to prevent strikethrough interpretation
-            part = part.replace("~", "\\~")
-
-            # 3. Apply bold spacing fix
-            part = bold_pattern.sub(bold_repl, part)
-
-            # 4. Apply italic spacing fix
-            part = italic_pattern.sub(italic_repl, part)
-
-            parts[i] = part
-
-    return "".join(parts)
 
 
 async def crawl_url(url, config):
