@@ -30,6 +30,7 @@ MODEL_OPTIONS = [
 SESSION_KEYS = {
     "crawled_text": "crawled_text",
     "llmed_text": "llmed_text",
+    "translated_text": "translated_text",
     "summary_text": "summary_text",
     "url_to_crawl": "url_to_crawl",
     "selected_model": "selected_model",  # Added for model selection
@@ -65,6 +66,13 @@ PROMPTS = {
         3.  **Detailed Breakdown:**  Organize the text into coherent paragraphs, elaborating on the key points. Each paragraph must have a subtitle. Remove any filler words, greetings, or repetitive phrases that do not contribute to a clear understanding of the text's core message.
 
         Here is the text to summarize:
+        """,
+    "translation": """
+        Translate the following text into Korean.
+        Ensure the translation is natural and accurate, preserving the original meaning and tone.
+        The output must be in Markdown format.
+
+        Here is the text to translate:
         """,
 }
 
@@ -382,6 +390,7 @@ def render_sidebar():
                     st.session_state[SESSION_KEYS["crawled_text"]] = transcript
                     # Reset LLM text and summary after crawling
                     st.session_state[SESSION_KEYS["llmed_text"]] = ""
+                    st.session_state[SESSION_KEYS["translated_text"]] = ""
                     st.session_state[SESSION_KEYS["summary_text"]] = ""
 
                     if "chat_session" in st.session_state:
@@ -405,6 +414,15 @@ def render_sidebar():
                         ),
                     )
                     loop.run_until_complete(crawl_url(url, crawler_config))
+                    # Reset LLM text and summary after crawling
+                    st.session_state[SESSION_KEYS["llmed_text"]] = ""
+                    st.session_state[SESSION_KEYS["translated_text"]] = ""
+                    st.session_state[SESSION_KEYS["summary_text"]] = ""
+
+                    if "chat_session" in st.session_state:
+                        del st.session_state["chat_session"]
+                    if "chat_display_history" in st.session_state:
+                        st.session_state["chat_display_history"] = []
                 except (ClientConnectorError, InvalidURL):
                     st.error(
                         f"Failed to connect to URL: {url}. Please check the URL and your network connection."
@@ -421,6 +439,8 @@ def render_sidebar():
             text_to_show = st.session_state.get(SESSION_KEYS["crawled_text"])
         elif mode == "AI Processed":
             text_to_show = st.session_state.get(SESSION_KEYS["llmed_text"])
+        elif mode == "Translated":
+            text_to_show = st.session_state.get(SESSION_KEYS["translated_text"])
         elif mode == "Summary":
             text_to_show = st.session_state.get(SESSION_KEYS["summary_text"])
         elif mode == "Chatbot":
@@ -451,6 +471,9 @@ def render_sidebar():
     elif mode == "AI Processed":
         text_to_download = st.session_state.get(SESSION_KEYS["llmed_text"])
         file_name = "ai_processed.pdf"
+    elif mode == "Translated":
+        text_to_download = st.session_state.get(SESSION_KEYS["translated_text"])
+        file_name = "translated.pdf"
     elif mode == "Summary":
         text_to_download = st.session_state.get(SESSION_KEYS["summary_text"])
         file_name = "summary.pdf"
@@ -483,7 +506,7 @@ def render_main_content():
     """Renders the main content area."""
     mode = st.radio(
         "View Mode",
-        ["Crawled", "AI Processed", "Summary", "Chatbot"],
+        ["Crawled", "AI Processed", "Translated", "Summary", "Chatbot"],
         horizontal=True,
         label_visibility="collapsed",
         key="view_mode",
@@ -491,6 +514,7 @@ def render_main_content():
 
     crawled_text = st.session_state.get(SESSION_KEYS["crawled_text"])
     llmed_text = st.session_state.get(SESSION_KEYS["llmed_text"])
+    translated_text = st.session_state.get(SESSION_KEYS["translated_text"])
     summary_text = st.session_state.get(SESSION_KEYS["summary_text"])
 
     if mode == "Crawled":
@@ -510,15 +534,37 @@ def render_main_content():
         else:
             st.info("No processed content. Please run the crawler first.")
 
+    elif mode == "Translated":
+        if crawled_text and not llmed_text:
+            with st.spinner("Extracting main content with Gemini..."):
+                llmed_text = convert_by_gemini(PROMPTS["extraction"], crawled_text)
+                st.session_state[SESSION_KEYS["llmed_text"]] = llmed_text
+
+        if llmed_text and not translated_text:
+            with st.spinner("Translating content with Gemini..."):
+                translated_text = convert_by_gemini(PROMPTS["translation"], llmed_text)
+                st.session_state[SESSION_KEYS["translated_text"]] = translated_text
+                st.session_state[SESSION_KEYS["summary_text"]] = (
+                    ""  # Reset summary to force re-summarization
+                )
+
+        if translated_text:
+            st.markdown(translated_text)
+        else:
+            st.info("No translated content.")
+
     elif mode == "Summary":
         if crawled_text and not llmed_text:
             with st.spinner("Extracting main content with Gemini..."):
                 llmed_text = convert_by_gemini(PROMPTS["extraction"], crawled_text)
                 st.session_state[SESSION_KEYS["llmed_text"]] = llmed_text
 
-        if llmed_text and not summary_text:
+        # Use translated text if available, otherwise use AI processed text
+        input_text = translated_text if translated_text else llmed_text
+
+        if input_text and not summary_text:
             with st.spinner("Generating summary with Gemini..."):
-                summary_text = convert_by_gemini(PROMPTS["summary"], llmed_text)
+                summary_text = convert_by_gemini(PROMPTS["summary"], input_text)
                 st.session_state[SESSION_KEYS["summary_text"]] = summary_text
 
         if summary_text:
