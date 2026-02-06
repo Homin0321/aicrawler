@@ -46,7 +46,9 @@ PROMPTS = {
         2. Remove only clearly irrelevant elements like:
         - Navigation menus
         - Advertisement sections
-        - Cookie notices
+        - Cookie notices, consent banners, and policy links
+        - Privacy policy notices, terms of service, and legal disclaimers
+        - Popups, modal dialogs, and newsletter signup forms
         - Footers with site information
         - Sidebars with external links
         - Any UI elements that don't contribute to main content
