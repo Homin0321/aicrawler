@@ -20,8 +20,8 @@ from utils import fix_markdown_symbol_issue
 
 # --- 1. Constants ---
 MODEL_OPTIONS = [
-    "gemini-flash-lite-latest",
     "gemini-3-flash-preview",
+    "gemini-flash-lite-latest",
     "gemini-3-pro-preview",
     "gemini-2.5-flash-lite",
     "gemini-2.5-flash",
@@ -196,6 +196,31 @@ def get_gemini_client():
     return genai.Client(api_key=GEMINI_API_KEY)
 
 
+def get_response_text(response):
+    """
+    Extracts text from Gemini response, filtering out non-text parts to avoid warnings.
+    """
+    if not response:
+        return ""
+
+    # Check if we have candidates and parts to manually extract text
+    if hasattr(response, "candidates") and response.candidates:
+        candidate = response.candidates[0]
+        if hasattr(candidate, "content") and hasattr(candidate.content, "parts"):
+            text_parts = []
+            for part in candidate.content.parts:
+                if hasattr(part, "text") and part.text:
+                    text_parts.append(part.text)
+            if text_parts:
+                return "".join(text_parts)
+
+    # Fallback to .text if manual extraction fails
+    if hasattr(response, "text"):
+        return response.text
+
+    return ""
+
+
 @st.cache_data
 def convert_by_gemini(instruction, text):
     """Converts text using Gemini."""
@@ -211,10 +236,16 @@ def convert_by_gemini(instruction, text):
         response = client.models.generate_content(
             model=selected_model, contents=instruction + text
         )
-        if not response or not hasattr(response, "text"):
+        if not response:
             st.error("Gemini returned no valid response.")
             return None
-        return fix_markdown_symbol_issue(response.text.strip())
+
+        text = get_response_text(response)
+        if not text:
+            st.error("Gemini returned no text in response.")
+            return None
+
+        return fix_markdown_symbol_issue(text.strip())
     except Exception as e:
         st.error(f"An error occurred during Gemini processing: {e}")
         return None
@@ -279,7 +310,7 @@ def chat_with_gemini(context):
         try:
             # Get AI response
             response = st.session_state["chat_session"].send_message(user_input)
-            answer = fix_markdown_symbol_issue(response.text.strip())
+            answer = fix_markdown_symbol_issue(get_response_text(response).strip())
             # Add AI response to chat history
             st.session_state["chat_display_history"].append(
                 {"role": "assistant", "content": answer}
