@@ -463,7 +463,11 @@ def render_sidebar():
                 except Exception as e:
                     st.error(f"An unexpected error occurred: {e}")
 
-    st.sidebar.divider()
+    st.sidebar.radio(
+        "View Mode",
+        ["Crawled", "AI Processed", "Translated", "Summary", "Chatbot"],
+        key="view_mode",
+    )
 
     if st.sidebar.button("Show Markdown Code", width="stretch"):
         mode = st.session_state.get("view_mode", "Crawled")
@@ -537,13 +541,7 @@ def render_sidebar():
 
 def render_main_content():
     """Renders the main content area."""
-    mode = st.radio(
-        "View Mode",
-        ["Crawled", "AI Processed", "Translated", "Summary", "Chatbot"],
-        horizontal=True,
-        label_visibility="collapsed",
-        key="view_mode",
-    )
+    mode = st.session_state.get("view_mode", "Crawled")
 
     crawled_text = st.session_state.get(SESSION_KEYS["crawled_text"])
     llmed_text = st.session_state.get(SESSION_KEYS["llmed_text"])
