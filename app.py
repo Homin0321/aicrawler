@@ -61,11 +61,8 @@ PROMPTS = {
         Here is the text to process:
         """,
     "summary": """
-        Analyze the following text and provide a piece of organized summary with the following structure:
-
-        1.  **Title:** (A concise and descriptive title for the text)
-        2.  **Executive Summary:** (2-3 sentences providing a high-level overview of the text's purpose and key takeaways)
-        3.  **Detailed Breakdown:**  Organize the text into coherent paragraphs, elaborating on the key points. Each paragraph must have a subtitle. Remove any filler words, greetings, or repetitive phrases that do not contribute to a clear understanding of the text's core message.
+        Analyze the following text and provide a piece of organized summary with the markdown header and bullet:
+        The output must translated into Korean.
 
         Here is the text to summarize:
         """,
