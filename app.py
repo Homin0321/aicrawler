@@ -587,12 +587,9 @@ def render_main_content():
                 llmed_text = convert_by_gemini(PROMPTS["extraction"], crawled_text)
                 st.session_state[SESSION_KEYS["llmed_text"]] = llmed_text
 
-        # Use translated text if available, otherwise use AI processed text
-        input_text = translated_text if translated_text else llmed_text
-
-        if input_text and not summary_text:
+        if llmed_text and not summary_text:
             with st.spinner("Generating summary with Gemini..."):
-                summary_text = convert_by_gemini(PROMPTS["summary"], input_text)
+                summary_text = convert_by_gemini(PROMPTS["summary"], llmed_text)
                 st.session_state[SESSION_KEYS["summary_text"]] = summary_text
 
         if summary_text:
@@ -601,7 +598,14 @@ def render_main_content():
             st.info("No summarized content.")
 
     elif mode == "Chatbot":
-        if crawled_text:
+        if crawled_text and not llmed_text:
+            with st.spinner("Extracting main content with Gemini..."):
+                llmed_text = convert_by_gemini(PROMPTS["extraction"], crawled_text)
+                st.session_state[SESSION_KEYS["llmed_text"]] = llmed_text
+
+        if llmed_text:
+            chat_with_gemini(llmed_text)
+        elif crawled_text:
             chat_with_gemini(crawled_text)
         else:
             st.info("No crawled content to chat about. Please run the crawler first.")
